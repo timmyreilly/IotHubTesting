@@ -1,3 +1,30 @@
+# Testing breaking points so far
+
+Sorting out validation errors looks no fun...
+```json
+{
+  "validationErrors":[
+    {
+      "description":"{'HostConfig': {'PortBindings': {'5671/tcp': [{'HostPort': '5671'}], '8883/tcp': [{'HostPort': '8883'}], '443/tcp': [{'HostPort': '443'}]}}} is not of type 'string'",
+      "contentPath":"modulesContent.$edgeAgent.properties.desired.systemModules.edgeHub.settings.createOptions",
+      "schemaPath":"properties.modulesContent.properties.$edgeAgent.properties.properties.desired.properties.systemModules.properties.edgeHub.properties.settings.properties.createOptions.type"
+    },
+    {
+      "description":"{} is not of type 'string'",
+      "contentPath":"modulesContent.$edgeAgent.properties.desired.modules.tempSensor.settings.createOptions",
+      "schemaPath":"properties.modulesContent.properties.$edgeAgent.properties.properties.desired.properties.modules.patternProperties.^[a-zA-Z0-9_-]+$.properties.settings.properties.createOptions.type"
+    },
+    {
+      "description":"{} is not of type 'string'",
+      "contentPath":"modulesContent.$edgeAgent.properties.desired.systemModules.edgeAgent.settings.createOptions",
+      "schemaPath":"properties.modulesContent.properties.$edgeAgent.properties.properties.desired.properties.systemModules.properties.edgeAgent.properties.settings.properties.createOptions.type"
+    }
+  ]
+}
+```
+
+# Notes
+
 A bunch of missing pieces through these docs: 
 
 This is the latest: 
