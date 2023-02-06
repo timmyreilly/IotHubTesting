@@ -2,7 +2,7 @@
 
 Create New Basic Network 
 ```
-$ ansible-playbook src/modules/network/build_infrastructure.yml -vv --extra-vars '{"resource_group_name":"tim-rg-d", "vnet_name":"vnet-d", "subnet_address_spaces":"[\"10.191.1.0/24\",\"10.191.2.0/24\"]", "location":"westus", "module_id":"", "vnet_address_space":"[\"10.191.0.0/16\"]" }'
+$ ansible-playbook src/modules/network/build_infrastructure.yml -vv --extra-vars '{"resource_group_name":"tim-rg-e", "vnet_name":"vnet-e", "subnet_address_spaces":"[\"10.191.1.0/24\",\"10.191.2.0/24\"]", "location":"westus", "module_id":"12", "vnet_address_space":"[\"10.191.0.0/16\"]" }'
 ```
 
 Upgrade Existing Network

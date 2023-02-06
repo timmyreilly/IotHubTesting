@@ -1,0 +1,7 @@
+---
+- hosts: braveheart
+  become: true 
+
+- tasks:
+
+  - meta: noop
