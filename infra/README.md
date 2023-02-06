@@ -4,39 +4,6 @@
 
 [![Build Status](https://dev.azure.com/csebraveheart/Azdo-Modular-Infrastructure-Pipelines/_apis/build/status/Pre-provisioning?branchName=main)](https://dev.azure.com/csebraveheart/Azdo-Modular-Infrastructure-Pipelines/_build/latest?definitionId=36&branchName=main)
 
-### Staging Build Status 
-[![Build Status](https://dev.azure.com/csebraveheart/Azdo-Modular-Infrastructure-Pipelines/_apis/build/status/staging-pre-provisioning?branchName=staging)](https://dev.azure.com/csebraveheart/Azdo-Modular-Infrastructure-Pipelines/_build/latest?definitionId=38&branchName=staging)
-- ^ *This would be a customer's first edit* 
-
-  
-## Summary 
-
-This solution was designed to support infrastructure 'module' development for Azure. It supports developers with a platform for flexible deployment methodologies. Provided in this repository is a sample of techniques and core infrastructure required for an API that triggers Azure Devops Build Pipelines for managing Azure Resources. The solution was designed to expose pipelines in a secure and extensible way providing customization for any client application and backend requirements.  
-
-One of the key features of this solution is the ability to manage resources in a private network. The solution can be configured to isolate execution to a private azdo agent, which becomes the exclusive entry-point to a customer architecture. 
-
-The solution is still under development, but is ready for deployment and module creation in development subscriptions.  
-
-To deploy the solution your team will need an Azure Devops organization an Azure Key Vault with service principal credentials provisioned and to create and trigger the pre-provisioning azure pipeline. (See demo video)
-
-To add modules to your solution, create a pipeline in Azure Devops and point to the already existing yaml in each module. (prefixed with 'azdo-' as a convention)
-
-We also recommended watching our video for deployment instructions here: [private demo video](https://msit.microsoftstream.com/video/2d40a1ff-0400-9fb2-790d-f1eb04dc9df9)
-
-And if you have any questions feel free to reach out directly to the team. 
-
-### Contents of this repository include a number of patterns for building with Azure Devops:  
-
-- Deploying idempotent network configuration using terraform and ansible: [network module](src/modules/network/)
-
-- Creating a vm to host an Azure Devops Private Agent with Ansible: [ubuntu azdo agent](src/modules/ubuntu_azdo_agent)
-
-- Creating a an ubuntu vm with terraform and configuring post deployment with ansible: [ubuntu worker](src/modules/ubuntu_worker)
-
-- Creating a new windows vm with terraform, configuring winrm, and configuring post deployment with ansible: [windows machine ready for config](src/modules/windows_worker)
-
-- Measuring network throughput on the azure backbone with go: [network tests](src/network-tests)
-
 ## Running and Developing Modules
 
 Dependencies: 
