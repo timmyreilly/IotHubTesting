@@ -1,0 +1,4 @@
+---
+run test_complete_infra
+
+run test_network

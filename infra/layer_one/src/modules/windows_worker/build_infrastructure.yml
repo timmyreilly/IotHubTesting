@@ -1,0 +1,236 @@
+---
+# - name: Check env parameters
+#   include: check_env_params.yml
+
+- name: build a basic windows machine
+  any_errors_fatal: true
+  hosts:
+    - localhost
+  gather_facts: true
+
+  pre_tasks: 
+    - name: generate new module ID if not defined 
+      set_fact: 
+        module_state_id: "{{ 999 | random }}"
+      when: module_id == "" 
+
+  vars:
+    - ansible_win_rm_script: "{{ lookup('env','FILE_URL_ANSIBLE_WINRM_SCRIPT') | default('https://corestorageaccountwus.file.core.windows.net/installationmedia/ConfigureRemotingForAnsible.ps1?sp=rl&st=2020-10-06T18:05:30Z&se=2024-10-22T18:05:00Z&sv=2019-12-12&sig=GP9Qxx543RGCKru2T9uJ8wLjTOo0qCOdzt4rehex%2F%2BM%3D&sr=f') }}"
+    - core_storage_account_name: "{{ lookup('env','CORE_STORAGE_ACCOUNT_NAME') }}"
+    - storage_access_key: "{{ lookup('env', 'ARM_ACCESS_KEY') }}"   
+    - storage_account_name: "{{ lookup('env', 'STORAGE_ACCOUNT_NAME') }}"   
+    - terraform_vars:
+        subscription_id: "{{ lookup('env','ARM_SUBSCRIPTION_ID') }}"
+        client_id: "{{ lookup('env','ARM_CLIENT_ID') }}"
+        client_secret: "{{ lookup('env','ARM_CLIENT_SECRET') }}"
+        tenant_id: "{{ lookup('env','ARM_TENANT_ID') }}"
+        resource_group_name: "{{ resource_group_name }}"  
+        location: "{{ location }}" 
+        admin_username: "{{ username }}"   
+        admin_password: "{{ password }}" 
+        subnet_name: "{{ subnet_name }}"  
+        vnet_name: "{{ vnet_name }}"  
+        machine_name: "{{ machine_name }}" 
+        machine_size: "{{ machine_size }}"        
+        environment: dev 
+        tag_module_id: "{{ module_state_id | default(module_id) }}"
+        tag_module_type: windows_worker
+
+  tasks: 
+    - name: peek terraform_vars
+      debug:
+        msg: "{{ terraform_vars }}"
+
+    - name: set terraform working directory
+      set_fact:
+        terraform_dir: "../../terraform/iot_windows"
+
+    - name: apply tf infrastructure
+      terraform:
+        project_path: "{{ terraform_dir }}"
+        state: present
+        force_init: true
+        init_reconfigure: true
+        variables: "{{ terraform_vars }}"
+        backend_config:
+          key: "{{ terraform_vars.tag_module_type + terraform_vars.tag_module_id + '.tfstate' }}"
+          container_name: state
+          storage_account_name: "{{ storage_account_name }}"
+          access_key: "{{ storage_access_key }}"
+      register: new_resources     
+
+    - name: Add host to new_windows_machine group
+      add_host:
+        hostname: "{{ item }}"  # 10.0.0.4
+        ansible_user: "{{  terraform_vars.admin_username }}" # "{{ lookup('env','GENERAL_ADMIN_USERNAME') }}"
+        ansible_password: "{{ terraform_vars.admin_password }}" #  "{{ lookup('env','GENERAL_ADMIN_PASSWORD') }}"
+        ansible_connection: winrm
+        ansible_winrm_transport: basic
+        ansible_winrm_server_cert_validation: ignore
+        group: new_windows_machine
+      with_items: "{{ new_resources.outputs.public_ip_address.value }}"
+
+- name: Setup IoT Edge On AKS Machine
+  hosts:
+    - new_windows_machine
+  any_errors_fatal: true
+  gather_facts: true
+
+  vars:
+    # core_storage_account_sas: "{{ hostvars['localhost']['core_storage_account_sas'] }}"
+    # service_account_ad_username: "{{ lookup('env','SERVICE_ACCOUNT_AD_USERNAME') }}"
+    # service_account_ad_password: "{{ lookup('env','SERVICE_ACCOUNT_AD_PASSWORD') }}"
+    # service_account_local_group_name: "{{ lookup('env','SERVICE_ACCOUNT_LOCAL_GROUP_NAME') }}"
+
+  tasks:
+    # - name: Join Domain
+    #   win_domain_membership:
+    #     dns_domain_name: "{{ lookup('env','AD_DOMAIN_DNS_NAME') }}"
+    #     domain_admin_user: "{{ lookup('env','AD_DOMAIN_ADMIN_USER') }}"
+    #     domain_admin_password: "{{ lookup('env','AD_DOMAIN_ADMIN_PASSWORD') }}"
+    #     state: domain
+    #   register: domain_state
+
+    # - name: Reboot
+    #   win_reboot:
+    #   when: domain_state.reboot_required
+
+    - name: Install git
+      win_chocolatey:
+        name: git
+        state: present
+
+    - name: Install all critical and security updates
+      win_updates:
+        category_names:
+        - CriticalUpdates
+        - SecurityUpdates
+        state: installed
+      register: update_result
+ 
+    # - name: Turn on Hyper-V
+    #   win_feature:
+    #     name: hyper-v
+    #     state: present
+    #   register: hyper_v_install
+
+    # - name: Turn on Hyper-V Command line
+    #   win_shell: | 
+    #     Get-WindowsOptionalFeature -Online -FeatureName *hyper*
+    #     Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V -All
+
+    # - name: Reboot when IoT Gateway when Hyper-V feature requires it
+    #   ansible.windows.win_reboot:
+    #   when: hyper_v_install.reboot_required 
+
+    # - name: set powercfg 
+    #   ansible.windows.win_powershell:
+    #     script: |
+    #       echo "Hello World"
+    #       powercfg /x -standby-timeout-ac 0
+    #       powercfg /x -standby-timeout-dc 0
+    #       powercfg /hibernate off
+    # # reg add HKLM\System\CurrentControlSet\Control\Power /v PlatformAoAcOverride /t REG_DWORD /d 0
+
+    # - name: Regedit for powercontrol
+    #   win_regedit:
+    #     path: HKLM:\SYSTEM\CurrentControlSet\Control\Power
+    #     name: PlatformAoAcOverride
+    #     data: 0
+    #     type: dword
+    #     state: present
+
+    # # - name: Install IoT Edge
+    # #   win_shell: |
+    # #     Invoke-WebRequest -Uri https://aka.ms/iotedge-win -OutFile C:\iotedge.msi
+    # #     Start-Process msiexec.exe -Wait -ArgumentList '/i C:\iotedge.msi /quiet /qn /norestart'
+    # #     Remove-Item C:\iotedge.msi
+
+    # - name: Download Msi for k3s
+    #   win_get_url:
+    #     URL: https://aka.ms/aks-edge/k3s-msi
+    #     dest: C:\k3s.msi
+
+    # - name: Download Zip File with support files
+    #   win_get_url:
+    #     URL: https://github.com/Azure/AKS-Edge/archive/refs/heads/main.zip
+    #     dest: C:\k3s-support.zip
+
+    # - name: Unzip File
+    #   win_unzip:
+    #     src: C:\k3s-support.zip
+    #     dest: C:\k3s-support
+    #     creates: C:\k3s-support
+
+    # # - name: Install K3s
+    # #   win_package:
+    # #     path: C:\k3s.msi
+    # #     state: present
+    # #     arguments: /install /passive
+
+    # - name: run msiexec to install k3s
+    #   win_shell: |
+    #     msiexec.exe /i C:\k3s.msi /quiet INSTALLDIR=C:\Programs\AksEdge VHDXDIR=C:\vhdx
+
+    # - name: Use AksEdge Module 
+    #   win_shell: |
+    #     Import-Module AksEdge
+    #     Get-Command -Module AKSEdge | Format-Table Name, Version
+    #     cat C:\k3s-support\AKS-Edge-main\tools\aksedge-config.json
+        
+    # - name: Copy json file to windows machine
+    #   win_copy:
+    #     src: C:\k3s-support\AKS-Edge-main\tools\aksedge-config.json
+    #     dest: C:\aksedge-config.json
+    #     remote_src: yes
+
+    # - name: Update json file with vcpu sizing
+    #   win_lineinfile:
+    #     path: C:\aksedge-config.json
+    #     regexp: '"CpuCount": 4,'
+    #     line: '"CpuCount": 2,'
+    #     state: present
+
+    # - name: Run Edge Shell Script
+    #   win_shell: |
+    #     C:\k3s-support\AKS-Edge-main\tools\AksEdgeShell.ps1
+
+    # - name: single machine cluster turn on
+    #   win_shell: |
+    #     cat C:\aksedge-config.json
+    #     New-AksEdgeDeployment -JsonConfigFilePath C:\aksedge-config.json
+
+    # - name: See Kubectl Status
+    #   win_shell: |
+    #     kubectl get nodes -o wide
+    #     kubectl get pods -A -o wide
+
+
+
+
+
+    # - name: Upload json document with kubernetes configuration
+    #   win_debug: 
+
+    # - name: Load current facts
+    #   slurp:
+    #     path: "C:\\k3s-support\\tools\\aksedge-config.json"
+    #   register: facts
+
+    # - debug:
+    #     var: facts
+  
+    # - name: Load Aks Edge Modules
+    #   win_shell: |
+    #     'C:\k3s-support\tools\AksEdgeShell.ps1\' -ExecutionPolicy Bypass -Verb runAs
+    # # "Start-Process 'powershell.exe' -ArgumentList '-noexit -ExecutionPolicy Bypass -File "C:\k3s-support\tools\AksEdgeShell.ps1\"' -Verb runAs"
+
+    # - win_command: powershell.exe -
+    #   args:
+    #     chdir: C:\k3s-support\tools
+    #     argv: 
+    #       - ExecutionPolicy Bypass
+    #       Verb: runAs
+    #       File: AksEdgeShell.ps1
+
+    # - win_command: whomai /all

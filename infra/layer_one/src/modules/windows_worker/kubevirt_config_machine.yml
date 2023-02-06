@@ -1,0 +1,213 @@
+## Ansible playbook to configure Windows machine
+# Connect to host 
+
+- name: Grab host
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Add host to new_windows_machine group
+      add_host:
+        hostname: "40.118.225.105"  # 10.0.0.4
+        ansible_user: "braveheart" # "{{ lookup('env','GENERAL_ADMIN_USERNAME') }}"
+        ansible_password: "P@ssword1234!" #  "{{ lookup('env','GENERAL_ADMIN_PASSWORD') }}"
+        ansible_connection: winrm
+        ansible_winrm_transport: basic
+        ansible_winrm_server_cert_validation: ignore
+        group: new_windows_machine
+
+- name: Setup IoT Edge On AKS Machine
+  hosts:
+    - new_windows_machine
+  any_errors_fatal: true
+  gather_facts: true
+
+  vars:
+
+  tasks:
+    # - name: Turn on Hyper-V
+    #   win_feature:
+    #     name: hyper-v
+    #     state: present
+    #   register: hyper_v_install
+
+    - name: Install hyper_v with powershell
+      win_shell: |
+        Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V -All | echo "Y"
+      ignore_errors: yes
+
+    # - name: Reboot when IoT Gateway when Hyper-V feature requires it
+    #   ansible.windows.win_reboot:
+    #   when: hyper_v_install.reboot_required 
+
+    - name: set powercfg 
+      ansible.windows.win_powershell:
+        script: |
+          echo "Hello World"
+          powercfg /x -standby-timeout-ac 0
+          powercfg /x -standby-timeout-dc 0
+          powercfg /hibernate off
+    # reg add HKLM\System\CurrentControlSet\Control\Power /v PlatformAoAcOverride /t REG_DWORD /d 0
+
+    - name: Regedit for powercontrol
+      win_regedit:
+        path: HKLM:\SYSTEM\CurrentControlSet\Control\Power
+        name: PlatformAoAcOverride
+        data: 0
+        type: dword
+        state: present
+
+    # - name: Install IoT Edge
+    #   win_shell: |
+    #     Invoke-WebRequest -Uri https://aka.ms/iotedge-win -OutFile C:\iotedge.msi
+    #     Start-Process msiexec.exe -Wait -ArgumentList '/i C:\iotedge.msi /quiet /qn /norestart'
+    #     Remove-Item C:\iotedge.msi
+
+    - name: Download Zip File with support files
+      win_get_url:
+        URL: https://github.com/Azure/AKS-Edge/archive/refs/heads/main.zip
+        dest: C:\k3s-support.zip
+
+    - name: Unzip File
+      win_unzip:
+        src: C:\k3s-support.zip
+        dest: C:\k3s-support
+        creates: C:\k3s-support
+
+    # - name: Download Msi for k3s
+    #   win_get_url:
+    #     URL: https://aka.ms/aks-edge/k3s-msi
+    #     dest: C:\k3s.msi
+
+    # - name: run msiexec to install k3s
+    #   win_shell: |
+    #     msiexec.exe /i C:\k3s.msi /quiet INSTALLDIR=C:\Programs\AksEdge VHDXDIR=C:\vhdx
+
+    - name: Use AksEdge Module 
+      win_shell: |
+        Import-Module AksEdge
+        Get-Command -Module AKSEdge | Format-Table Name, Version
+        
+    - name: Add config to machine
+      win_copy:
+        src: ./aksedge-config.json
+        dest: C:\aksedge-config.json
+        remote_src: no
+
+    # - name: Run Edge prompt
+    #   win_command: |
+    #     C:\k3s-support\AKS-Edge-main\tools\AksEdgePrompt.cmd
+
+    - name: single machine cluster turn on
+      win_shell: |
+        cat C:\aksedge-config.json
+        New-AksEdgeDeployment -JsonConfigFilePath C:\aksedge-config.json
+
+    - name: See Kubectl Status
+      win_shell: |
+        kubectl get nodes -o wide
+        kubectl get pods -A -o wide
+
+    # Download and apply manifest
+    - name: Download kubevirt operator.
+      win_get_url:
+        url:  https://github.com/kubevirt/kubevirt/releases/download/v0.53.1/kubevirt-operator.yaml
+        dest: C:\kubevirt-operator.yaml
+
+    - name: Apply kubevirt operator.
+      kubernetes.core.k8s:
+        state: present
+        src: C:\kubevirt-operator.yaml
+
+    # - name: Deploy Kubevirt operator
+    #   win_shell: | 
+    #     kubectl apply -f https://github.com/kubevirt/kubevirt/releases/download/v0.53.1/kubevirt-operator.yaml
+
+    - name: Download kubevirt cr.
+      win_get_url:
+        url:  https://github.com/kubevirt/kubevirt/releases/download/v0.53.1/kubevirt-cr.yaml
+        dest: C:\kubevirt-cr.yaml
+
+    - name: Apply kubevirt cr.
+      kubernetes.core.k8s:
+        state: present
+        src: C:\kubevirt-cr.yaml
+
+    # - name: Deploy Kubevirt custom resource
+    #   win_shell: | 
+    #     kubectl apply -f https://github.com/kubevirt/kubevirt/releases/download/v0.53.1/kubevirt-cr.yaml
+
+    - name: Download cdi-operator.
+      win_get_url:
+        url:  https://github.com/kubevirt/containerized-data-importer/releases/download/v1.49.0/cdi-operator.yaml
+        dest: C:\cdi-operator.yaml
+
+    - name: Apply cdi-operator.
+      kubernetes.core.k8s:
+        state: present
+        src: C:\cdi-operator.yaml
+
+    # - name: Deploy containerized data importer operator 
+    #   win_shell: | 
+    #     kubectl create -f https://github.com/kubevirt/containerized-data-importer/releases/download/v1.49.0/cdi-operator.yaml
+
+    - name: Download cdi-cr.
+      win_get_url:
+        url:  https://github.com/kubevirt/containerized-data-importer/releases/download/v1.49.0/cdi-cr.yaml
+        dest: C:\cdi-cr.yaml
+
+    - name: Apply cdi cr.
+      kubernetes.core.k8s:
+        state: present
+        src: C:\cdi-cr.yaml
+
+    # - name: Deploy containered data importer custom resource
+    #   win_shell: | 
+    #     kubectl create -f https://github.com/kubevirt/containerized-data-importer/releases/download/v1.49.0/cdi-cr.yaml
+
+    - name: Download zip file of kubevirt deployment
+      win_get_url:
+        URL: https://github.com/Azure-Samples/IoT-Edge-K8s-KubeVirt-Deployment/archive/refs/heads/main.zip
+        dest: C:\IoT-Edge-K8s-KubeVirt-Deployment.zip
+
+    - name: Unzip File
+      win_unzip:
+        src: C:\IoT-Edge-K8s-KubeVirt-Deployment.zip
+        dest: C:\IoT-Edge-K8s-KubeVirt-Deployment
+        creates: C:\IoT-Edge-K8s-KubeVirt-Deployment
+
+    - name: Add config to machine
+      win_copy:
+        src: ./config_helm_v1.toml
+        dest: C:\IoT-Edge-K8s-KubeVirt-Deployment\IoT-Edge-K8s-KubeVirt-Deployment-main\deployment\helm\config.toml
+        remote_src: no
+
+    - name: Install Helm 
+      win_chocolatey:
+        name: kubernetes-helm
+        state: present
+
+    # - name: add emulation to existing kubevirt_cr
+    #   kubernetes.core.k8s:
+    #     state: patched
+    #     kind: kubevirt
+    #     namespace: kubevirt 
+    #     name: kubevirt
+    #     definition:
+    #       spec:
+    #         configuration:
+    #           developerConfiguration:
+    #             useEmulation: true
+
+    - name: create kubevirt vm deployment with IotEdge config 
+      win_shell: |
+        cd C:\IoT-Edge-K8s-KubeVirt-Deployment\IoT-Edge-K8s-KubeVirt-Deployment-main\deployment\helm
+        helm install --generate-name . --set publicSshKey="$(cat ~/.ssh/ubuntu.pub)",aziotEdgeVmEnableExternalSsh=true,aziotEdgeVmDiskSize=4Gi,nameOverride=aziot-edge-kubevirt,macAddress=fe:7e:48:a0:7d:22 --set-file azIotEdgeConfig=config.toml
+        
+    - name: Poke at kubevirt vm
+      win_shell: |
+         kubectl describe nodes
+         kubectl describe vmi aziot-edge-kubevirt-linux
+
+
+
+    

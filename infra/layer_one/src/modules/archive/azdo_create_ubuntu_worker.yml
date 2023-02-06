@@ -1,0 +1,99 @@
+---
+# pipeline to ubuntu module
+name: $(BuildDefinitionName).$(DayOfYear)$(Rev:.r)
+
+pr: none
+trigger: none
+
+parameters:
+  - name: RESOURCE_GROUP_NAME
+    displayName: RESOURCE_GROUP_NAME
+    type: string
+  - name: VNET_NAME
+    displayName: VNET_NAME
+    type: string
+  - name: SUBNET_NAME
+    displayName: SUBNET_NAME
+    type: string
+  - name: REGION
+    displayName: REGION
+    type: string
+  - name: MACHINE_USERNAME
+    displayName: User name for the machine admin
+    type: string
+  - name: MACHINE_PASSWORD
+    displayName: User password for the machine admin 
+    type: string
+  - name: MACHINE_NAME
+    displayName: User password for the machine admin 
+    type: string 
+  - name: MACHINE_SIZE 
+    displayName: Size of machine 
+    type: string 
+    default: "Standard_DS4_v2" 
+    # TAGS
+  - name: MODULE_ID
+    displayName: Pass a module_id to manage an existing deployment 
+    type: string
+    default: ""
+  - name: TAG_ENVIRONMENT
+    displayName: Target Environment
+    type: string
+    # ANSIBLE PARAMS
+  - name: ANSIBLE_VERBOSITY_LEVEL
+    displayName: Ansible verbosity level
+    type: string
+    default: "-vv"
+    values:
+      - "-v"
+      - "-vv"
+      - "-vvv"
+
+variables:
+  - group: core-key-vault
+
+pool:
+  name: default
+
+jobs:
+  - job: DeployUbuntuMachine
+    displayName: Deploy Ubuntu Machine Module
+    workspace:
+      clean: all
+
+    steps:
+      - checkout: self
+
+      - script: |
+          az login --service-principal -u $ARM_CLIENT_ID -p $ARM_CLIENT_SECRET -t $ARM_TENANT_ID
+        env:
+          ARM_CLIENT_ID: $(ARM-CLIENT-ID)
+          ARM_CLIENT_SECRET: $(ARM-CLIENT-SECRET)
+          ARM_TENANT_ID: $(ARM-TENANT-ID)
+
+      - script: >
+          ansible-playbook $(Agent.BuildDirectory)/s/src/modules/ubuntu_worker/build_infrastructure.yml 
+          ${{ parameters.ANSIBLE_VERBOSITY_LEVEL }} 
+          --extra-vars 
+          '{
+              "resource_group_name": "${{ parameters.RESOURCE_GROUP_NAME }}", 
+              "vnet_name": "${{ parameters.VNET_NAME }}",
+              "subnet_name": "${{ parameters.SUBNET_NAME }}", 
+              "location": "${{ parameters.REGION }}", 
+              "username": "${{ parameters.MACHINE_USERNAME }}", 
+              "password": "${{ parameters.MACHINE_PASSWORD }}", 
+              "machine_name": "${{ parameters.MACHINE_NAME }}", 
+              "machine_size": "${{ parameters.MACHINE_SIZE }}", 
+              "module_id":"${{ parameters.MODULE_ID }}" 
+          }'
+        displayName: "build basic ubuntu machine and add to network infrastructure"
+        continueOnError: false
+        env:
+          ANSIBLE_HOST_KEY_CHECKING: false
+          ANSIBLE_STDOUT_CALLBACK: debug
+          ARM_CLIENT_ID: $(ARM-CLIENT-ID)
+          ARM_CLIENT_SECRET: $(ARM-CLIENT-SECRET)
+          ARM_SUBSCRIPTION_ID: $(ARM-SUBSCRIPTION-ID)
+          ARM_TENANT_ID: $(ARM-TENANT-ID)
+          ARM_ACCESS_KEY: $(ARM-ACCESS-KEY)
+          STORAGE_ACCOUNT_NAME: $(STORAGE-ACCOUNT-NAME)

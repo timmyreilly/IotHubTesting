@@ -1,0 +1,95 @@
+## Ansible playbook to configure Windows machine
+# Connect to host 
+
+- name: Grab host
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Add host to new_windows_machine group
+      add_host:
+        hostname: "40.118.225.105"  # 10.0.0.4
+        ansible_user: "braveheart" # "{{ lookup('env','GENERAL_ADMIN_USERNAME') }}"
+        ansible_password: "P@ssword1234!" #  "{{ lookup('env','GENERAL_ADMIN_PASSWORD') }}"
+        ansible_connection: winrm
+        ansible_winrm_transport: basic
+        ansible_winrm_server_cert_validation: ignore
+        group: new_windows_machine
+
+- name: Configure ARC Connection AKS Windows Machine
+  hosts:
+    - new_windows_machine
+  any_errors_fatal: true
+  gather_facts: true
+
+  vars:
+
+  tasks:
+
+    - name: Use AksEdge Module 
+      win_shell: |
+        Import-Module AksEdge
+        Get-Command -Module AKSEdge | Format-Table Name, Version
+        
+    - name: See Kubectl Status
+      win_shell: |
+        kubectl get nodes -o wide
+        kubectl get pods -A -o wide
+
+    - name: Install Helm 
+      win_chocolatey:
+        name: kubernetes-helm
+        state: present
+
+    - name: Copy aide-userconfig.json to machine
+      win_copy:
+        src: ./aide-userconfig.json
+        dest: C:\aide-userconfig.json
+
+    - name: Copy AksEdgeAzureSetup.ps1 to machine
+      win_copy:
+        src: ./AksEdgeAzureSetup.ps1
+        dest: C:\AksEdgeAzureSetup.ps1
+
+    - name: Run AksEdgeAzureSetup
+      win_shell: |
+        az login --service-principal -u 386ba2b4-7795-497f-b74c-55f4bdd6d4c3 -p 0N8OIyKYHoFWxQZ-drYBF.Vgq3y5sxw1_o --tenant 72f988bf-86f1-41af-91ab-2d7cd011db47
+        C:\AksEdgeAzureSetup.ps1 C:\aide-userconfig.json -spContributorRole
+
+    - name: Initialize arc 
+      win_shell: |
+        Initialize-AideArc
+
+    - name: Connect aide arc, this could take 10 minutes
+      win_shell: | 
+        Connect-AideArc
+
+    - name: Get service token from cluster
+      win_shell: |
+        Get-AideArcKubernetesServiceToken
+
+
+
+
+    # - name: Login To az cli with service principal
+    #   win_shell: |
+    #     az login --service-principal -u 386ba2b4-7795-497f-b74c-55f4bdd6d4c3 -p 0N8OIyKYHoFWxQZ-drYBF.Vgq3y5sxw1_o --tenant 72f988bf-86f1-41af-91ab-2d7cd011db47
+
+    # grant service principal read access to service principals
+    # az ad sp list --query "[].{appId:appId, displayName:displayName}" --all
+
+    # Give service principal directory read permissions for active directory
+    
+    # - name: Run Edge prompt
+    #   win_command: |
+    #     C:\k3s-support\AKS-Edge-main\tools\AksEdgePrompt.cmd
+    #     C:\k3s-support\AKS-Edge-main\tools\scripts\AksEdgeAzureSetup\AksEdgeAzureSetup.ps1 C:\aide-userconfig.json -spContributorRole
+
+# manually login with sp 
+# $loginparams = @("--scope", "https://graph.microsoft.com//.default", "--service-principal", "-u", "386ba2b4-7795-497f-b74c-55f4bdd6d4c3", "-p", "0N8OIyKYHoFWxQZ-drYBF.Vgq3y5sxw1_o", "--tenant", "72f988bf-86f1-41af-91ab-2d7cd011db47" )
+
+# az role assignment create --assignee 386ba2b4-7795-497f-b74c-55f4bdd6d4c3 --role Contributor --scope /subscriptions/5c514147-21c3-4f7e-8329-625443da4254/resourceGroups/az-arc-demo
+    
+# az role assignment create --assignee 386ba2b4-7795-497f-b74c-55f4bdd6d4c3 --role "Directory Readers" 
+
+# az ad sp list --filter "displayname eq 'Custom Locations RP'" --query "[?appDisplayName=='Custom Locations RP'].id" -o tsv
+# 51dfe1e8-70c6-4de5-a08e-e18aff23d815 "Microsofts Tenant ID"

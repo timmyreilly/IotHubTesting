@@ -1,0 +1,66 @@
+name: $(BuildDefinitionName).$(DayOfYear)$(Rev:.r)
+
+pr: none
+trigger: none
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+parameters:
+  - name: prefix
+    displayName: prefix
+    default: "devapi"
+  - name: location
+    displayName: location
+    default: "westus2"
+  - name: ado_project_name
+    displayName: ado project name eg.-  MyAzureDevopsProject or Azure-PrivateDevopsAgent-Demos-Ansible-Terraform-Pipelines
+    default: Azdo-Modular-Infrastructure-Pipelines
+  - name: ado_org_service_url
+    displayName: ado org service url eg.-  https://dev.azure.com/csebraveheart
+    default: https://dev.azure.com/csebraveheart
+
+# Using a Variable Group as the Secured Network will be applied post the creation of core 
+variables:
+- group: core-key-vault
+
+steps: 
+# Manual TODO: Install in ADO Organization https://marketplace.visualstudio.com/items?itemName=ms-devlabs.custom-terraform-tasks 
+- task: TerraformInstaller@0
+  displayName: "Install Terraform"
+  inputs:
+    terraformVersion: "0.13.2"
+    
+- script: |
+    terraform init -backend-config="storage_account_name=$(STORAGE-ACCOUNT-NAME)"  -backend-config="container_name=$(STORAGE-STATE-CONTAINER-NAME)" -backend-config="key=${{ parameters.prefix }}.web.terraform.tfstate"
+    terraform validate
+  displayName: "Run TF Validate"
+  workingDirectory: $(System.DefaultWorkingDirectory)/src/terraform/web
+  env: 
+    ARM_TENANT_ID: $(ARM-TENANT-ID)
+    ARM_CLIENT_SECRET: $(ARM-CLIENT-SECRET)
+    ARM_CLIENT_ID: $(ARM-CLIENT-ID)
+    ARM_SUBSCRIPTION_ID: $(ARM-SUBSCRIPTION-ID)
+    ARM_ACCESS_KEY: $(ARM-ACCESS-KEY) 
+    
+- script: |
+    terraform apply -auto-approve
+  displayName: "Run TF Apply"
+  workingDirectory: $(System.DefaultWorkingDirectory)/src/terraform/web
+  env:
+    ARM_TENANT_ID: $(ARM-TENANT-ID)
+    ARM_CLIENT_ID: $(ARM-CLIENT-ID)
+    ARM_CLIENT_SECRET: $(ARM-CLIENT-SECRET)
+    ARM_SUBSCRIPTION_ID: $(ARM-SUBSCRIPTION-ID) 
+    ARM_ACCESS_KEY: $(ARM-ACCESS-KEY)
+    TF_VAR_tenant_id: $(ARM-TENANT-ID)
+    TF_VAR_client_id: $(ARM-CLIENT-ID)
+    TF_VAR_client_secret: $(ARM-CLIENT-SECRET)
+    TF_VAR_service_connection_pat: $(DEVOPS-PAT)
+    TF_VAR_prefix: ${{ parameters.prefix }}
+    TF_VAR_location: ${{ parameters.location }}
+    TF_VAR_subscription_id: $(ARM-SUBSCRIPTION-ID) 
+    TF_VAR_ado_project_name: ${{ parameters.ado_project_name }}
+    TF_VAR_ado_org_service_url: ${{ parameters.ado_org_service_url }}
+
+

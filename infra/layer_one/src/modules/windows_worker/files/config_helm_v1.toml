@@ -1,0 +1,41 @@
+auto_reprovisioning_mode = "OnErrorOnly"
+
+[provisioning]
+source = "manual"
+connection_string = "HostName=iot-az220-training-tpr230105.azure-devices.net;DeviceId=myAksEdge;SharedAccessKey=k4dMAuzAjBsND6ggywUBR8pgdol1kegnU+mNaQm9Vk0="
+
+[aziot_keys]
+
+[preloaded_keys]
+
+[cert_issuance]
+
+[preloaded_certs]
+
+[agent]
+name = "edgeAgent"
+type = "docker"
+imagePullPolicy = "on-create"
+
+[agent.config]
+image = "mcr.microsoft.com/azureiotedge-agent:1.2"
+
+[agent.config.createOptions]
+
+[agent.env]
+
+[connect]
+workload_uri = "unix:///var/run/iotedge/workload.sock"
+management_uri = "unix:///var/run/iotedge/mgmt.sock"
+
+[listen]
+workload_uri = "fd://aziot-edged.workload.socket"
+management_uri = "fd://aziot-edged.mgmt.socket"
+min_tls_version = "tls1.0"
+
+[watchdog]
+max_retries = "infinite"
+
+[moby_runtime]
+uri = "unix:///var/run/docker.sock"
+network = "azure-iot-edge"

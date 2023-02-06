@@ -1,0 +1,165 @@
+---
+# - name: Check env parameters
+#   include: check_env_params.yml
+
+- name: build ubuntu machine azdo agent 
+  any_errors_fatal: true
+  hosts:
+    - localhost
+  gather_facts: False 
+
+  vars:
+  - terraform_dir: "../../terraform/core"
+  - storage_access_key: "{{ lookup('env', 'ARM_ACCESS_KEY') | mandatory }}"
+  - storage_account_name: "{{ lookup('env', 'STORAGE_ACCOUNT_NAME') | mandatory }}"
+  - storage_state_container_name: "{{ lookup('env', 'STORAGE_STATE_CONTAINER_NAME') | mandatory }}"
+  - terraform_vars:
+      subscription_id: "{{ lookup('env','ARM_SUBSCRIPTION_ID') | mandatory }}"
+      prefix: "{{ lookup('env','TF_VAR_prefix') | mandatory }}"
+      resource_group_name: "{{ lookup('env','TF_VAR_resource_group_name') | mandatory }}"
+      resource_group_location: "{{ lookup('env','TF_VAR_resource_group_location') | mandatory }}"
+      admin_username: "{{ lookup('env','TF_VAR_admin_username') | mandatory }}"
+      admin_password: "{{ lookup('env','TF_VAR_admin_password') | mandatory }}"
+      tag_module_id: "{{ 600 | random(seed=41) }}"
+
+  tasks: 
+    - name: peek terraform_vars variables
+      debug:
+        msg: "{{ terraform_vars }}"
+
+    - name: apply tf infrastructure
+      terraform:
+        project_path: "{{ terraform_dir }}"
+        state: present
+        force_init: true
+        variables: "{{ terraform_vars }}"
+        backend_config: 
+          key: "{{ 'core' + terraform_vars.tag_module_id + '.terraform.tfstate' }}" 
+          container_name: "{{ storage_state_container_name }}"
+          storage_account_name: "{{ storage_account_name }}"
+          access_key: "{{ storage_access_key }}"
+      register: ubuntu_deployment_details
+      ignore_errors: false # 'true' ONLY FOR DEBUGGING
+
+    - name: Set Public IP as gather_facts 
+      set_fact: 
+        public_ip: "{{ ubuntu_deployment_details.outputs.vm_public_ip.value }}"
+        
+    - name: Add host to new_agent group
+      add_host:
+        hostname: "{{ public_ip }}"
+        ansible_ssh_user: "{{ terraform_vars.admin_username | mandatory }}"
+        ansible_ssh_pass: "{{ terraform_vars.admin_password | mandatory }}" 
+        ansible_connection: ssh
+        ansible_become: true
+        ansible_become_users: "{{ terraform_vars.admin_username | mandatory }}"
+        ansible_become_password: "{{ terraform_vars.admin_password | mandatory }}"
+        ansible_ssh_common_args: "-o StrictHostKeyChecking=no"
+        group: new_agent 
+    
+    
+
+        
+- name: Configure Ubuntu Azdo agent  
+  hosts:
+    - new_agent
+  any_errors_fatal: true
+  gather_facts: true
+  roles:
+      # Get PAT here: https://docs.microsoft.com/en-us/azure/devops/pipelines/agents/prepare-permissions?view=azure-devops 
+      - gsoft.azure_devops_agent
+  vars:
+    - az_devops_agent_role: build
+    - az_devops_accountname: csebraveheart
+    - az_devops_accesstoken: "{{ lookup('env', 'DEVOPS_AGENT_PAT') }}"
+    - az_devops_project_name: Azure-PrivateDevopsAgent-Demos-Ansible-Terraform-Pipelines
+    - az_devops_agent_pool_name: "Default"
+    - az_devops_agent_name: "{{ hostvars['localhost']['public_ip'] }}"
+  tasks: 
+    - name: ping azdo agent 
+      ping: 
+        data: "hello world"
+
+    - name: Install curl 
+      apt:
+        name: curl
+        state: present
+
+    - name: Install Azure CLI 
+      shell: | 
+        echo "Installing Azure CLI"
+        echo "================================================================================"
+        if ! command -v az &> /dev/null
+        then
+            echo "az could not be found"
+            curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+        else
+            sudo apt-get update && sudo apt-get install --only-upgrade -y azure-cli
+        fi
+        echo
+
+    - name: Install Pip and Python Dependencies 
+      shell: | 
+        sudo apt update
+        sudo apt install python3.6
+        sudo apt install -y python3-pip
+        sudo apt install -y python3-setuptools
+    
+    - name: Install Ansible 
+      shell: | 
+        echo "Installing Ansible"
+        echo "================================================================================"
+        sudo apt install -y software-properties-common libssl-dev libffi-dev 
+        sudo apt-add-repository --yes --update ppa:ansible/ansible
+        sudo apt install -y ansible
+
+    - name: Install Python Dependencies
+      shell: |
+        echo "Installing Pip Packages (Ansible, Linters, OpenCensus, etc.)"
+        echo "================================================================================"
+        pip3 install "wheel==0.30.0"
+        python setup.py bdist_wheel 
+        sudo pip3 install wheel
+        sudo pip3 install ansible 
+        
+    - name: Install Ansible Dependencies 
+      shell: | 
+        echo "Using Ansible to perform remaining configuration"
+        echo "================================================================================"
+        ansible-galaxy install gsoft.azure_devops_agent
+        ansible --version 
+    
+
+    - name: apt update
+      apt:
+        update-cache: true
+
+    - name: apt upgrade
+      apt:
+        name: "*"
+
+    - name: apt install
+      apt:
+        pkg:
+          - unzip
+          - aptitude
+
+    - name: install sshpass
+      apt:
+        name: sshpass
+        state: present
+        update_cache: true
+
+    - name: Unarchive terraform
+      unarchive:
+        src: https://releases.hashicorp.com/terraform/0.13.2/terraform_0.13.2_linux_amd64.zip
+        dest: /usr/local/bin
+        remote_src: true
+
+    - name: validate terraform install
+      shell: terraform -v
+      register: result_tf
+    - debug:
+        var: result_tf
+
+        

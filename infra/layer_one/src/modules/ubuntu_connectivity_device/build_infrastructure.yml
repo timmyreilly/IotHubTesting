@@ -1,0 +1,105 @@
+---
+# - name: Check env parameters
+#   include: check_env_params.yml
+
+- name: build ubuntu machine
+  any_errors_fatal: true
+  hosts:
+    - localhost
+  gather_facts: true
+
+  pre_tasks: 
+    - name: generate new module ID if not defined 
+      set_fact: 
+        module_state_id: "{{ 999 | random }}"
+      when: module_id == "" 
+
+  vars:
+    - terraform_dir: "../../terraform/basic_ubuntu"
+    - core_storage_account_name: "{{ lookup('env','CORE_STORAGE_ACCOUNT_NAME') }}"
+    - storage_access_key: "{{ lookup('env', 'ARM_ACCESS_KEY') }}"
+    - storage_account_name: "{{ lookup('env', 'STORAGE_ACCOUNT_NAME') }}"   
+    - terraform_vars:
+        subscription_id: "{{ lookup('env','ARM_SUBSCRIPTION_ID') }}"
+        client_id: "{{ lookup('env','ARM_CLIENT_ID') }}"
+        client_secret: "{{ lookup('env','ARM_CLIENT_SECRET') }}"
+        tenant_id: "{{ lookup('env','ARM_TENANT_ID') }}"
+        resource_group_name: "{{ resource_group_name }}"
+        location: "{{ location }}" 
+        admin_username: "{{ username }}" 
+        admin_password: "{{ password }}" 
+        subnet_name: "{{ subnet_name }}" 
+        vnet_name: "{{ vnet_name }}" 
+        machine_name: "{{ machine_name }}" 
+        machine_size: "{{ machine_size }}" 
+        environment: "{{ lookup('env','TAG_ENVIRONMENT') | default('dev') }}"
+        tag_module_id: "{{ module_state_id | default(module_id) }}"
+        tag_module_type: ubuntu_worker
+  tasks:
+    - name: peek terraform_vars variables
+      debug:
+        msg: "{{ terraform_vars }}"
+
+    - name: apply tf infrastructure
+      terraform:
+        project_path: "{{ terraform_dir }}"
+        state: present
+        force_init: true
+        variables: "{{ terraform_vars }}"
+        backend_config:
+          key: "{{ terraform_vars.tag_module_type + terraform_vars.tag_module_id + '.tfstate' }}"
+          container_name: state
+          storage_account_name: "{{ storage_account_name }}"
+          access_key: "{{ storage_access_key }}"
+      register: ubuntu_deployment_details
+      ignore_errors: false # 'true' ONLY FOR DEBUGGING
+
+    - debug:
+        msg: "{{ ubuntu_deployment_details }}"
+
+    - name: Add host to new_ubuntu group
+      add_host:
+        hostname: "{{ ubuntu_deployment_details.outputs.network_interface_public_ip.value }}"
+        ansible_ssh_user: "{{ terraform_vars.admin_username }}"
+        ansible_ssh_pass: "{{ terraform_vars.admin_password }}"
+        ansible_connection: ssh
+        ansible_become: true
+        ansible_become_users: "{{ terraform_vars.admin_username }}"
+        ansible_become_password: "{{ terraform_vars.admin_password }}"
+        ansible_ssh_common_args: "-o StrictHostKeyChecking=no"
+        group: new_ubuntu
+        ubuntu_ip: "{{ ubuntu_deployment_details.outputs.network_interface_private_ip }}"
+
+- name: Setup ubuntu
+  hosts:
+    - new_ubuntu
+  any_errors_fatal: true
+  gather_facts: true
+
+  tasks:
+    # validate_deployment
+
+    # cat the content of the core storage
+    - shell: |
+        uri='https://corestorageaccountwus.file.core.windows.net/installationmedia/ConfigureRemotingForAnsible.ps1?sp=rl&st=2020-10-06T18:05:30Z&se=2024-10-22T18:05:00Z&sv=2019-12-12&sig=GP9Qxx543RGCKru2T9uJ8wLjTOo0qCOdzt4rehex%2F%2BM%3D&sr=f'
+        curl -X GET $uri
+      ignore_errors: true # 'true' ONLY FOR DEBUGGING
+
+    - name: Install dicom client software
+      pip: 
+        name: git+https://github.com/GoogleCloudPlatform/healthcare-api-dicomweb-cli/archive/v1.0.2.zip
+      ignore_errors: true # 'true' ONLY FOR DEBUGGING
+
+    - name: Install IoT Software
+      pip: 
+        name: azure-iot-device
+
+    
+    - name: Clone sample code 
+      git: 
+        repo: git clone https://github.com/Azure/azure-iot-sdk-python.git
+        dest: /home/{{ username }}/azure-iot-sdk-python
+        recursive: yes
+
+
+

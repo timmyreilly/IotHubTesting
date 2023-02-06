@@ -1,0 +1,38 @@
+# CI pipeline for API WebApp
+# Uses a library for the variables
+# TODO: Create variable group in preprovisioning to support Web Api
+trigger:
+  branches:
+    include:
+      - main
+
+# Paths are always specified relative to the root of the repository.
+  paths:
+    exclude:
+      - README.md
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+ - group: web-api-variables
+ - group: pipeline-service-connection
+
+steps:
+- task: Docker@1
+  displayName: 'Build an image'
+  inputs:
+    azureSubscriptionEndpoint: $(azureSubscriptionEndpoint)
+    azureContainerRegistry: $(azureContainerRegistry)
+    dockerFile: src/Web.Api/Dockerfile
+    imageName: '$(azureContainerRegistry)/web-api:latest'
+    useDefaultContext: false
+    buildContext: src/Web.Api
+
+- task: Docker@1
+  displayName: 'Push an image'
+  inputs:
+    azureSubscriptionEndpoint: $(azureSubscriptionEndpoint)
+    azureContainerRegistry: $(azureContainerRegistry)
+    command: 'Push an image'
+    imageName: '$(azureContainerRegistry)/web-api:latest'

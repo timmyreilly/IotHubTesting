@@ -1,0 +1,108 @@
+
+- name: Grab host
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Add host to new_windows_machine group
+      add_host:
+        hostname: "40.118.225.105"  # 10.0.0.4
+        ansible_user: "braveheart" # "{{ lookup('env','GENERAL_ADMIN_USERNAME') }}"
+        ansible_password: "P@ssword1234!" #  "{{ lookup('env','GENERAL_ADMIN_PASSWORD') }}"
+        ansible_connection: winrm
+        ansible_winrm_transport: basic
+        ansible_winrm_server_cert_validation: ignore
+        group: new_windows_machine
+
+    - name: Open Azure Port for VM 
+      shell: | 
+        az vm open-port --resource-group tim-rg-d --name devWinTimb --port "5986,3389" --apply-to-subnet --nsg-name tim-rg-d-nsg
+
+- name: Setup IoT Edge On AKS Machine
+  hosts:
+    - new_windows_machine
+  any_errors_fatal: true
+  gather_facts: true
+
+  vars:
+    K8S_AUTH_KUBECONFIG: C:\Users\braveheart\.kube\config
+
+  tasks:
+
+    - win_chocolatey:
+        name: vscode
+        state: present
+
+    - name: Install python
+      win_chocolatey:
+        name: python
+        state: present
+        version: 3.9.0
+
+    - name: Get a list of all pods from any namespace
+      kubernetes.core.k8s_info:
+        kubeconfig: C:\Users\braveheart\.kube\config
+        kind: Pod
+      register: pod_list
+
+    - name: Create a k8s namespace
+      kubernetes.core.k8s:
+        name: testing
+        api_version: v1
+        kind: Namespace
+        state: present
+
+    - name: Install git
+      win_chocolatey:
+        name: git
+        state: present
+
+    - name: Install Azure CLI
+      win_chocolatey:
+        name: azure-cli
+        state: present
+
+    # - name: Install all critical and security updates
+    #   win_updates:
+    #     category_names:
+    #     - CriticalUpdates
+    #     - SecurityUpdates
+    #     state: installed
+    #   register: update_result
+
+    - name: Install Helm 
+      win_chocolatey:
+        name: kubernetes-helm
+        state: present
+
+    - name: Download Krew
+      win_get_url: 
+        URL: https://github.com/kubernetes-sigs/krew/releases/download/v0.4.3/krew.exe 
+        dest: C:\krew.exe
+
+    # - name: Run Krew Install 
+    #   win_command: |
+    #     C:\krew.exe install krew
+
+    - name: Ensure that krew is on path
+      ansible.windows.win_path:
+        elements:
+        - '%USERPROFILE%\.krew\bin'
+        
+
+    # - name: test krew plugin
+    #   win_shell: |
+    #     kubectl krew
+    #   ignore_errors: true
+
+    # - name: test crew from cmd
+    #   win_command: |
+    #     kubectl krew
+
+    # - name: Install 
+    #   win_shell: |
+    #     kubectl krew update
+    
+    # - name: Install virt with krew
+    #   win_shell: |
+    #     kubectl krew install virt 
+

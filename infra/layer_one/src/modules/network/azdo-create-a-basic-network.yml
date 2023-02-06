@@ -1,0 +1,98 @@
+---
+# pipeline to deploy modules
+
+name: $(BuildDefinitionName).$(DayOfYear)$(Rev:.r)
+
+pr: none
+trigger: none
+
+parameters:
+  - name: REGION
+    displayName: REGION
+    type: string
+  - name: RESOURCE_GROUP_NAME
+    displayName: RESOURCE_GROUP_NAME
+    type: string
+  - name: VNET_NAME
+    displayName: VNET_NAME
+    type: string
+  - name: NETWORK_VNET_ADDRESS_SPACE
+    displayName: Network Core Vnet Address Space
+    type: string
+  - name: NETWORK_SUBNETS
+    displayName: Network Core Subnets
+    type: string
+    # TAGS
+  - name: MODULE_ID
+    displayName: Pass a module_id to manage an existing deployment 
+    type: string
+    default: ""
+  - name: TAG_ENVIRONMENT
+    displayName: Target Environment
+    type: string
+    # ANSIBLE PARAMS
+  - name: ANSIBLE_VERBOSITY_LEVEL
+    displayName: Ansible verbosity level
+    type: string
+    default: "-vv"
+    values:
+      - "-v"
+      - "-vv"
+      - "-vvv"
+  # - name: AD_USERNAME
+  #   displayName: AD User name for the user
+  #   type: string
+
+variables:
+  - group: core-key-vault
+
+pool:
+  name: default
+
+jobs:
+  - job: DeployBasicNetwork
+    displayName: Deploy basic network module
+    workspace:
+      clean: all
+
+    steps:
+      - checkout: self
+
+      - script: |
+          az login --service-principal -u $ARM_CLIENT_ID -p $ARM_CLIENT_SECRET -t $ARM_TENANT_ID
+        env:
+          ARM_CLIENT_ID: $(ARM-CLIENT-ID)
+          ARM_CLIENT_SECRET: $(ARM-CLIENT-SECRET)
+          ARM_TENANT_ID: $(ARM-TENANT-ID)
+
+      - script: | 
+          echo Stuff to look at: 
+          echo Build Directory: $(Agent.BuildDirectory) 
+          echo $HELLO_WORLD
+          echo ansible-playbook $(Agent.BuildDirectory)/s/src/modules/network/build_infrastructure.yml -vv --extra-vars '{"resource_group_name":"${{ parameters.RESOURCE_GROUP_NAME }}", "vnet_name":"${{ parameters.VNET_NAME }}", "subnet_address_spaces":"${{ parameters.NETWORK_SUBNETS }}", "location":"${{ parameters.REGION }}", "vnet_address_space":"${{ parameters.NETWORK_VNET_ADDRESS_SPACE }}"}'
+        env: 
+          HELLO_WORLD: "You made it!"
+
+      - script: >
+          ansible-playbook $(Agent.BuildDirectory)/s/src/modules/network/build_infrastructure.yml 
+          ${{ parameters.ANSIBLE_VERBOSITY_LEVEL }} 
+          --extra-vars 
+          '{
+            "resource_group_name":"${{ parameters.RESOURCE_GROUP_NAME }}", 
+            "vnet_name":"${{ parameters.VNET_NAME }}", 
+            "vnet_address_space":"${{ parameters.NETWORK_VNET_ADDRESS_SPACE }}", 
+            "subnet_address_spaces":"${{ parameters.NETWORK_SUBNETS }}",
+            "location":"${{ parameters.REGION }}", 
+            "module_id":"${{ parameters.MODULE_ID }}" 
+          }'
+        displayName: "build basic network infrastructure"
+        continueOnError: false
+        env:
+          ANSIBLE_HOST_KEY_CHECKING: false
+          ANSIBLE_STDOUT_CALLBACK: debug
+          ARM_CLIENT_ID: $(ARM-CLIENT-ID)
+          ARM_CLIENT_SECRET: $(ARM-CLIENT-SECRET)
+          ARM_SUBSCRIPTION_ID: $(ARM-SUBSCRIPTION-ID)
+          ARM_TENANT_ID: $(ARM-TENANT-ID)
+          ARM_ACCESS_KEY: $(ARM-ACCESS-KEY)
+          STORAGE_ACCOUNT_NAME: $(STORAGE-ACCOUNT-NAME)

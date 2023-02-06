@@ -62,3 +62,26 @@ And deploy
 az iot edge set-modules --hub-name iotHubDevOne --device-id edge-device-dev-1 --content ./deployment.debug.template.json --login "HostName=iotHubDevOne.azure-devices.net;SharedAccessKeyName=iothubowner;SharedAccessKey=<MYSECRET+pJfGY=>"
 ```
 
+
+
+
+```
+
+
+Port forward from our MQTT broker 
+
+```
+kubectl port-forward service/azedge-dmqtt-frontend 1883:30179
+kubectl port-forward service/azedge-dmqtt-frontend :1883 --address 0.0.0.0
+```
+
+netstat -n -l -t -p
+
+mosquitto_pub -h localhost -t "orders" -l -d -q 1 -i "publisher1" -u client1 -P password
+
+docker run -it --name mosquitto -p 1883:1883 -v $(pwd)/mosquitto:/mosquitto/ eclipse-mosquitto 
+
+
+sudo docker run -it -p 11883:1883 -p 9001:9001 -v $(pwd)/mosquitto:/mosquitto/ eclipse-mosquitto
+
+/iot-hub-ecosystem/mqtt_python_sim$ sudo docker run -it -p 11883:1883 -p 9001:9001 -v $(pwd)/mosquitto:/mosquitto/ eclipse-mosquitto

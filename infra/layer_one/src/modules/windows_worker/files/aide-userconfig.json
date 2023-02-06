@@ -1,0 +1,23 @@
+{
+    "SchemaVersion": "1.0",
+    "Version": "1.0",
+    "AksEdgeProduct": "AKS Edge Essentials - K3s (Public Preview)",
+    "AksEdgeProductUrl": "",
+    "InstallOptions": {
+        "InstallPath": "",
+        "VhdxPath": ""
+    },
+    "Azure": {
+        "SubscriptionName":"bterkaly-tireilly",
+        "SubscriptionId": "5c514147-21c3-4f7e-8329-625443da4254",
+        "TenantId": "72f988bf-86f1-41af-91ab-2d7cd011db47",
+        "ResourceGroupName": "az-arc-demo",
+        "ServicePrincipalName": "azure-cli-2022-02-03-18-58-28",
+        "Location": "EastUS",
+        "Auth": {
+            "ServicePrincipalId": "386ba2b4-7795-497f-b74c-55f4bdd6d4c3",
+            "Password": "0N8OIyKYHoFWxQZ-drYBF.Vgq3y5sxw1_o"
+        }
+    },
+    "AksEdgeConfigFile": "aksedge-config.json"
+}

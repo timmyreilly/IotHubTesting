@@ -1,0 +1,33 @@
+# CD pipeline for API WebApp
+# Uses a library for the variables
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+ - group: web-api-variables
+ - group: pipeline-service-connection
+
+steps:
+- task: AzureCLI@1
+  displayName: 'Azure CLI: Save container registry secrets'
+  inputs:
+    azureSubscription: $(azureSubscriptionEndpoint)
+    scriptLocation: inlineScript
+    inlineScript: |
+     registryUserName=$(az acr credential show -n $(azureContainerRegistry) --query username)
+     registryPassword=$(az acr credential show -n $(azureContainerRegistry) --query passwords[0].value)
+     registryServerUrl=$(az acr show -n $(azureContainerRegistry) --query loginServer)
+     echo "##vso[task.setvariable variable=registryUserName]$registryUserName"
+     echo "##vso[task.setvariable variable=registryPassword;issecret=true]$registryPassword"
+     echo "##vso[task.setvariable variable=registryServerUrl]$registryServerUrl"
+
+- task: AzureWebAppContainer@1
+  displayName: 'Azure Web App on Container Deploy'
+  inputs:
+    azureSubscription: $(azureSubscriptionEndpoint)
+    appName: $(appServiceNameApi)
+    deployToSlotOrASE: true
+    resourceGroupName: $(webResourceGroupName)
+    containers: '$(azureContainerRegistry)/web-api:latest'
+    appSettings: '-DOCKER_REGISTRY_SERVER_URL $(registryServerUrl) -DOCKER_REGISTRY_SERVER_USERNAME $(registryUserName) -DOCKER_REGISTRY_SERVER_PASSWORD $(registryPassword) '

@@ -1,0 +1,119 @@
+---
+# - name: Check env parameters
+#   include: check_env_params.yml
+
+- name: build ubuntu machine
+  any_errors_fatal: true
+  hosts:
+    - localhost
+  gather_facts: true
+
+  vars: 
+    - resource_group_name: "iotHubScenarioMock"
+    - iot_hub_name: "iotHubDevOne"
+
+  tasks:
+
+    - name: Add host to new_ubuntu group
+      add_host:
+        hostname: "20.237.138.242"
+        ansible_ssh_user: "braveheart"
+        ansible_ssh_pass: "P@ssword1234!"
+        ansible_connection: ssh
+        ansible_become: true
+        ansible_become_users: "braveheart"
+        ansible_become_password: "P@ssword1234!"
+        ansible_ssh_common_args: "-o StrictHostKeyChecking=no"
+        group: new_ubuntu
+        ubuntu_ip: "20.237.138.242"
+    
+    - name: Get iot hub connection string from azure cli
+      shell: |
+        az iot hub show-connection-string --name {{ iot_hub_name }} --resource-group {{ resource_group_name }} --query "connectionString" --output tsv
+      register: iot_hub_connection_string
+
+- name: Setup ubuntu
+  hosts:
+    - new_ubuntu
+  any_errors_fatal: true
+  gather_facts: true
+
+  tasks:
+    # validate_deployment
+
+    - name: Install curl 
+      apt:
+        name: curl
+        state: present
+
+    # - name: Install Azure CLI 
+    #   shell: | 
+    #     echo "Installing Azure CLI"
+    #     echo "================================================================================"
+    #     if ! command -v az &> /dev/null
+    #     then
+    #         echo "az could not be found"
+    #         curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+    #     else
+    #         sudo apt-get update && sudo apt-get install --only-upgrade -y azure-cli
+    #     fi
+    #     echo
+
+    # - name: Install Pip and Python Dependencies 
+    #   shell: | 
+    #     sudo apt update
+    #     sudo apt install python3.6
+    #     sudo apt install -y python3-pip
+    #     sudo apt install -y python3-setuptools
+
+
+    - name: apt update
+      apt:
+        update-cache: true
+
+    - name: apt upgrade
+      apt:
+        name: "*"
+
+    - name: apt install
+      apt:
+        pkg:
+          - unzip
+          - build-essential
+          - aptitude
+          - python3-pip
+          - python3-setuptools
+          - python-setuptools
+          - python3-venv
+    
+    - name: Clone sample code 
+      git: 
+        repo: https://github.com/Azure/azure-iot-sdk-python.git
+        dest: /home/{{ ansible_ssh_user }}/azure-iot-sdk-python
+        recursive: yes
+
+    - name: Install virtualenv via pip
+      pip: 
+        name: virtualenv
+        executable: pip3
+
+    # pip install azure-iot-device
+    - name: Install azure-iot-device
+      pip: 
+        name: azure-iot-device
+        executable: pip3
+
+    
+
+  # echo "export IOT_HUB_DEVICE_CONNECTION_STRING='{{ iot_hub_connection_string }}'" >> ~/.bashrc
+    # set IOT_HUB_DEVICE_CONNECTION_STRING environment variable
+    - name: Set IOT_HUB_DEVICE_CONNECTION_STRING environment variable
+      shell: |
+        echo "export IOT_HUB_DEVICE_CONNECTION_STRING='malarky'" >> ~/.bashrc
+
+    - name: Source bash rc file 
+      shell: |
+        . ~/.bashrc
+
+
+
