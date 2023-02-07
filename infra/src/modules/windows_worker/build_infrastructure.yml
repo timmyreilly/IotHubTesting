@@ -70,6 +70,13 @@
         group: new_windows_machine
       with_items: "{{ new_resources.outputs.public_ip_address.value }}"
 
+    - name: wait for the WinRM ports to come online
+      wait_for:
+        port: 5986
+        host: "{{ item }}"
+        timeout: 600
+      with_items: "{{ new_resources.outputs.public_ip_address.value }}"
+
 - name: Setup IoT Edge On AKS Machine
   hosts:
     - new_windows_machine
